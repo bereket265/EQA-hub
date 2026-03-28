@@ -3,10 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-  <title>EQA Central Hub | Complete System with Video Training & User Roles</title>
+  <title>EQA Central Hub | Cloud-Based System</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  
+  <!-- Firebase SDKs (Compat version for easier integration) -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-storage-compat.js"></script>
+  
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Inter', sans-serif; background: #f0f4f8; color: #1a2c3e; }
@@ -81,6 +87,10 @@
     .feedback-type-btn { padding: 0.5rem 1rem; border-radius: 30px; border: 1px solid #cbdde6; background: white; cursor: pointer; }
     .feedback-type-btn.selected { background: #1f6e8c; color: white; border-color: #1f6e8c; }
     
+    .loading { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 2rem; border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); z-index: 2000; display: none; text-align: center; }
+    .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #1f6e8c; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    
     @media (max-width: 768px) { .scores-container { grid-template-columns: 1fr; } .score-input-group { grid-template-columns: 1fr; } }
   </style>
 </head>
@@ -90,23 +100,42 @@
   <div class="container hero-content">
     <div class="title-section">
       <h1><i class="fas fa-chalkboard-teacher"></i> EQA Central Hub</h1>
-      <div class="badge">Video Training | User Roles | Complete Management</div>
+      <div class="badge">Cloud-Based | Video Training | Complete Management</div>
     </div>
     <div class="stats-summary"><div class="count" id="facilityCount">0</div><p>EQA Facilities</p></div>
   </div>
+</div>
+
+<div class="loading" id="loadingOverlay">
+  <div class="spinner"></div>
+  <p style="margin-top: 1rem;">Loading data from cloud...</p>
 </div>
 
 <div class="container" id="appContainer">
   <div id="authView">
     <div class="auth-container">
       <div class="auth-tabs"><button class="auth-tab active" id="loginTabBtn">Login</button><button class="auth-tab" id="registerTabBtn">Register</button></div>
-      <div id="loginForm" class="auth-form"><input type="text" id="loginUsername" placeholder="Username"><input type="password" id="loginPassword" placeholder="Password"><button onclick="login()"><i class="fas fa-sign-in-alt"></i> Login</button></div>
-      <div id="registerForm" class="auth-form" style="display:none;"><input type="text" id="regFacilityName" placeholder="Facility Name"><input type="text" id="regLocation" placeholder="City / Region"><input type="text" id="regHeadName" placeholder="Facility Head"><input type="text" id="regUsername" placeholder="Username"><input type="password" id="regPassword" placeholder="Password"><button onclick="registerFacility()">Register</button></div>
+      <div id="loginForm" class="auth-form">
+        <input type="text" id="loginUsername" placeholder="Username">
+        <input type="password" id="loginPassword" placeholder="Password">
+        <button onclick="login()"><i class="fas fa-sign-in-alt"></i> Login</button>
+      </div>
+      <div id="registerForm" class="auth-form" style="display:none;">
+        <input type="text" id="regFacilityName" placeholder="Facility Name">
+        <input type="text" id="regLocation" placeholder="City / Region">
+        <input type="text" id="regHeadName" placeholder="Facility Head">
+        <input type="text" id="regUsername" placeholder="Username">
+        <input type="password" id="regPassword" placeholder="Password">
+        <button onclick="registerFacility()">Register</button>
+      </div>
     </div>
   </div>
 
   <div id="mainAppView" style="display:none;">
-    <div class="user-header"><div><i class="fas fa-user-circle"></i> <strong id="userNameDisplay"></strong> <span id="userRoleDisplay"></span></div><div><span id="facilityNameDisplay"></span><button class="logout-btn" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button></div></div>
+    <div class="user-header">
+      <div><i class="fas fa-user-circle"></i> <strong id="userNameDisplay"></strong> <span id="userRoleDisplay"></span></div>
+      <div><span id="facilityNameDisplay"></span><button class="logout-btn" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button></div>
+    </div>
 
     <div class="year-round-bar">
       <div class="year-selector"><span><i class="fas fa-calendar-year"></i> Year:</span><select id="yearSelector" onchange="changeYear()"></select><button class="add-round-btn" onclick="openAddYearModal()"><i class="fas fa-plus"></i> Add Year</button></div>
@@ -118,24 +147,21 @@
       <div class="admin-panel">
         <div class="report-section"><div><i class="fas fa-file-excel"></i> <strong>Comprehensive Report</strong></div><button class="btn-primary" onclick="downloadComprehensiveReport()"><i class="fas fa-download"></i> Download Excel Report</button></div>
         
-        <!-- User Management Section -->
         <div class="feedback-card-admin"><h3><i class="fas fa-users"></i> User Management</h3>
-          <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1rem;"><input type="text" id="newUsername" placeholder="Username" style="flex:1; padding:0.5rem; border-radius:30px;"><input type="password" id="newUserPassword" placeholder="Password" style="flex:1; padding:0.5rem; border-radius:30px;"><select id="newUserRole" style="padding:0.5rem; border-radius:30px;"><option value="facility">Facility Head</option><option value="trainer">Trainer</option><option value="admin">Admin</option></select><select id="newUserFacility" style="padding:0.5rem; border-radius:30px;"><option value="">-- Select Facility (for Facility Head) --</option></select><button class="btn-primary" onclick="createUser()"><i class="fas fa-user-plus"></i> Create User</button></div>
-          <div style="overflow-x:auto;"><table class="user-table" id="userTable"><thead><tr><th>Username</th><th>Role</th><th>Facility</th><th>Actions</th></thead><tbody id="userTableBody"></tbody></table></div>
+          <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1rem;"><input type="text" id="newUsername" placeholder="Username" style="flex:1; padding:0.5rem; border-radius:30px;"><input type="password" id="newUserPassword" placeholder="Password" style="flex:1; padding:0.5rem; border-radius:30px;"><select id="newUserRole" style="padding:0.5rem; border-radius:30px;"><option value="facility">Facility Head</option><option value="trainer">Trainer</option><option value="admin">Admin</option></select><select id="newUserFacility" style="padding:0.5rem; border-radius:30px;"><option value="">-- Select Facility --</option></select><button class="btn-primary" onclick="createUser()"><i class="fas fa-user-plus"></i> Create User</button></div>
+          <div style="overflow-x:auto;"><table class="user-table" id="userTable"><thead>大学的<th>Username</th><th>Role</th><th>Facility</th><th>Actions</th> </thead><tbody id="userTableBody"></tbody> </table></div>
         </div>
         
-        <!-- Video Training Upload Section -->
         <div class="video-card"><h3><i class="fas fa-video"></i> Video Training Library</h3>
           <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1rem;"><input type="text" id="videoTitle" placeholder="Video Title" style="flex:2; padding:0.5rem; border-radius:30px;"><input type="file" id="videoFile" accept="video/mp4,video/webm,video/ogg" style="flex:2;"><button class="btn-primary" onclick="uploadVideo()"><i class="fas fa-upload"></i> Upload Training Video</button></div>
           <div id="videoLibrary" class="video-grid"></div>
         </div>
         
-        <!-- Send Feedback Section -->
         <div class="feedback-card-admin"><h3><i class="fas fa-upload"></i> Send Feedback & Files to Facility</h3>
           <div style="margin-top:1rem;"><select id="adminFacilitySelect" style="width:100%; padding:0.6rem; border-radius:30px; margin-bottom:0.5rem;"></select>
           <div class="feedback-type-select"><button class="feedback-type-btn" data-type="oss" onclick="selectFeedbackType('oss')">OSS</button><button class="feedback-type-btn" data-type="lqms" onclick="selectFeedbackType('lqms')">LQMS</button><button class="feedback-type-btn" data-type="pt" onclick="selectFeedbackType('pt')">PT</button><button class="feedback-type-btn" data-type="rbr" onclick="selectFeedbackType('rbr')">RBR</button></div>
           <textarea id="adminFeedbackText" rows="3" placeholder="Enter feedback message..." style="width:100%; padding:0.6rem; border-radius:16px; margin:0.5rem 0;"></textarea>
-          <input type="file" id="adminFeedbackFile" multiple style="margin:0.5rem 0;"><div id="adminFileList" style="font-size:0.7rem;"></div>
+          <input type="file" id="adminFeedbackFile" multiple style="margin:0.5rem 0;">
           <button class="btn-primary" onclick="submitAdminFeedback()" style="margin-top:0.5rem;"><i class="fas fa-paper-plane"></i> Send Feedback & Files</button></div>
         </div>
         
@@ -165,40 +191,437 @@
 <div id="facilityModal" class="modal"><div class="modal-card"><h3>Add New Facility</h3><input type="text" id="facilityName" placeholder="Facility Name"><input type="text" id="facilityLocation" placeholder="City / Region"><input type="text" id="facilityHead" placeholder="Head Name"><input type="text" id="facilityUsername" placeholder="Username"><input type="password" id="facilityPassword" placeholder="Password"><select id="facilityStatus"><option>Active</option><option>Pending</option></select><div style="display:flex; gap:10px; margin-top:1rem;"><button class="btn-primary" onclick="addNewFacility()">Save</button><button class="btn-outline" onclick="closeFacilityModal()">Cancel</button></div></div></div>
 
 <script>
+  // ==================== FIREBASE CONFIGURATION ====================
+  // Your Firebase configuration
+  const firebaseConfig = {
+    apiKey: "AIzaSyBL_Rh87QkR-mA1z6lVzv5vNAhO9yZipe0",
+    authDomain: "eqa433bereket.firebaseapp.com",
+    projectId: "eqa433bereket",
+    storageBucket: "eqa433bereket.firebasestorage.app",
+    messagingSenderId: "478437995856",
+    appId: "1:478437995856:web:a30a02b210e0a07656e855",
+    measurementId: "G-F5783TWBQT"
+  };
+  
+  // Initialize Firebase
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  
+  // ==================== GLOBAL VARIABLES ====================
   let facilities = [], years = [], roundsByYear = {}, currentYear = "", currentRound = "", facilityScores = {}, feedbackRecords = {}, facilityFiles = {}, users = [], trainingVideos = [], currentUser = null;
   let selectedFeedbackType = "oss";
-
-  const defaultFacilities = [
-    { id: "FAC001", name: "Central Reference Lab", location: "Addis Ababa", headName: "Dr. Alemayehu", status: "Active", username: "FAC001", password: "pass123" },
-    { id: "FAC002", name: "Northern Region Hub", location: "Mekelle", headName: "Dr. Tsigereda", status: "Active", username: "FAC002", password: "pass123" },
-    { id: "FAC003", name: "Southwest Clinical", location: "Hawassa", headName: "Dr. Mesfin", status: "Active", username: "FAC003", password: "pass123" }
-  ];
-
-  function init() { loadData(); setupEventListeners(); if (sessionStorage.getItem('eqa_current_user')) { currentUser = JSON.parse(sessionStorage.getItem('eqa_current_user')); showMainApp(); } else showAuthView(); }
-
-  function loadData() {
-    let stored = localStorage.getItem('eqa_data_v10');
-    if (stored) { let d = JSON.parse(stored); facilities = d.facilities; years = d.years; roundsByYear = d.roundsByYear; currentYear = d.currentYear; currentRound = d.currentRound; facilityScores = d.facilityScores; feedbackRecords = d.feedbackRecords; facilityFiles = d.facilityFiles; users = d.users; trainingVideos = d.trainingVideos || []; }
-    else { facilities = JSON.parse(JSON.stringify(defaultFacilities)); years = ["2024", "2025"]; roundsByYear = { "2024": ["Round 1", "Round 2", "Round 3"], "2025": ["Round 1"] }; currentYear = "2024"; currentRound = "Round 1"; facilityScores = {}; feedbackRecords = {}; facilityFiles = {}; trainingVideos = []; users = facilities.map(f => ({ id: f.id, username: f.username, password: f.password, facilityId: f.id, facilityName: f.name, role: "facility" })); users.push({ id: "admin", username: "admin", password: "admin123", role: "admin" }); users.push({ id: "trainer1", username: "trainer", password: "train123", role: "trainer" }); }
-    facilities.forEach(f => { if (!facilityScores[f.id]) facilityScores[f.id] = {}; years.forEach(y => { if (!facilityScores[f.id][y]) facilityScores[f.id][y] = {}; (roundsByYear[y] || []).forEach(r => { if (!facilityScores[f.id][y][r]) facilityScores[f.id][y][r] = { oss: 70, lqms: 70, pt: 70, rbr: 70 }; }); }); if (!feedbackRecords[f.id]) feedbackRecords[f.id] = {}; if (!facilityFiles[f.id]) facilityFiles[f.id] = {}; });
-    updateFacilityCount(); saveToLocalStorage();
+  
+  // ==================== HELPER FUNCTIONS ====================
+  function showLoading() { document.getElementById('loadingOverlay').style.display = 'flex'; }
+  function hideLoading() { document.getElementById('loadingOverlay').style.display = 'none'; }
+  
+  function escapeHtml(s) { if (!s) return ''; return s.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m])); }
+  function getScoreClass(s) { if (s >= 85) return 'high'; if (s >= 70) return 'medium'; return 'low'; }
+  
+  // ==================== FIREBASE DATA LOADING ====================
+  async function loadAllData() {
+    showLoading();
+    try {
+      // Load facilities
+      const facilitiesSnapshot = await db.collection('facilities').get();
+      facilities = [];
+      facilitiesSnapshot.forEach(doc => facilities.push({ id: doc.id, ...doc.data() }));
+      
+      // If no facilities exist, create default ones
+      if (facilities.length === 0) {
+        const defaultFacilities = [
+          { id: "FAC001", name: "Central Reference Lab", location: "Addis Ababa", headName: "Dr. Alemayehu", status: "Active", username: "FAC001", password: "pass123" },
+          { id: "FAC002", name: "Northern Region Hub", location: "Mekelle", headName: "Dr. Tsigereda", status: "Active", username: "FAC002", password: "pass123" },
+          { id: "FAC003", name: "Southwest Clinical", location: "Hawassa", headName: "Dr. Mesfin", status: "Active", username: "FAC003", password: "pass123" }
+        ];
+        for (const f of defaultFacilities) {
+          await db.collection('facilities').doc(f.id).set(f);
+          facilities.push(f);
+        }
+      }
+      
+      // Load system config (years, rounds)
+      const configDoc = await db.collection('system').doc('config').get();
+      if (configDoc.exists) {
+        const data = configDoc.data();
+        years = data.years || ["2024", "2025"];
+        roundsByYear = data.roundsByYear || { "2024": ["Round 1", "Round 2", "Round 3"], "2025": ["Round 1"] };
+        currentYear = data.currentYear || "2024";
+        currentRound = data.currentRound || "Round 1";
+      } else {
+        years = ["2024", "2025"];
+        roundsByYear = { "2024": ["Round 1", "Round 2", "Round 3"], "2025": ["Round 1"] };
+        currentYear = "2024";
+        currentRound = "Round 1";
+        await db.collection('system').doc('config').set({ years, roundsByYear, currentYear, currentRound });
+      }
+      
+      // Load scores
+      const scoresSnapshot = await db.collection('scores').get();
+      facilityScores = {};
+      scoresSnapshot.forEach(doc => {
+        facilityScores[doc.id] = doc.data();
+      });
+      
+      // Load feedback
+      const feedbackSnapshot = await db.collection('feedback').get();
+      feedbackRecords = {};
+      feedbackSnapshot.forEach(doc => {
+        feedbackRecords[doc.id] = doc.data();
+      });
+      
+      // Load files metadata
+      const filesSnapshot = await db.collection('files').get();
+      facilityFiles = {};
+      filesSnapshot.forEach(doc => {
+        facilityFiles[doc.id] = doc.data();
+      });
+      
+      // Load users
+      const usersSnapshot = await db.collection('users').get();
+      users = [];
+      usersSnapshot.forEach(doc => users.push({ id: doc.id, ...doc.data() }));
+      
+      // If no users exist, create default ones
+      if (users.length === 0) {
+        const defaultUsers = [
+          { id: "admin", username: "admin", password: "admin123", role: "admin" },
+          { id: "trainer1", username: "trainer", password: "train123", role: "trainer" }
+        ];
+        for (const f of facilities) {
+          defaultUsers.push({ id: f.id, username: f.username, password: f.password, facilityId: f.id, facilityName: f.name, role: "facility" });
+        }
+        for (const u of defaultUsers) {
+          await db.collection('users').doc(u.id).set(u);
+          users.push(u);
+        }
+      }
+      
+      // Load videos
+      const videosSnapshot = await db.collection('videos').get();
+      trainingVideos = [];
+      videosSnapshot.forEach(doc => trainingVideos.push({ id: doc.id, ...doc.data() }));
+      
+      updateFacilityCount();
+      renderYearSelector();
+      renderRoundSelector();
+    } catch (error) {
+      console.error("Error loading data:", error);
+      alert("Error loading data. Please check your Firebase configuration and ensure Firestore is enabled.");
+    }
+    hideLoading();
   }
-
-  function saveToLocalStorage() { localStorage.setItem('eqa_data_v10', JSON.stringify({ facilities, years, roundsByYear, currentYear, currentRound, facilityScores, feedbackRecords, facilityFiles, users, trainingVideos })); }
+  
+  async function saveToFirebase(collection, id, data) {
+    try {
+      await db.collection(collection).doc(id).set(data);
+    } catch (error) {
+      console.error(`Error saving to ${collection}:`, error);
+    }
+  }
+  
+  async function deleteFromFirebase(collection, id) {
+    try {
+      await db.collection(collection).doc(id).delete();
+    } catch (error) {
+      console.error(`Error deleting from ${collection}:`, error);
+    }
+  }
+  
   function updateFacilityCount() { document.getElementById('facilityCount').innerText = facilities.length; }
   function renderYearSelector() { let s = document.getElementById('yearSelector'); s.innerHTML = years.map(y => `<option value="${y}" ${y===currentYear?'selected':''}>${y}</option>`).join(''); }
   function renderRoundSelector() { let s = document.getElementById('roundSelector'); let rounds = roundsByYear[currentYear] || ["Round 1"]; s.innerHTML = rounds.map(r => `<option value="${r}" ${r===currentRound?'selected':''}>${r}</option>`).join(''); }
-  function changeYear() { currentYear = document.getElementById('yearSelector').value; currentRound = (roundsByYear[currentYear] || ["Round 1"])[0]; saveToLocalStorage(); renderRoundSelector(); refreshCurrentView(); }
-  function changeRound() { currentRound = document.getElementById('roundSelector').value; saveToLocalStorage(); refreshCurrentView(); }
+  
+  async function changeYear() { currentYear = document.getElementById('yearSelector').value; currentRound = (roundsByYear[currentYear] || ["Round 1"])[0]; await db.collection('system').doc('config').update({ currentYear, currentRound }); renderRoundSelector(); refreshCurrentView(); }
+  async function changeRound() { currentRound = document.getElementById('roundSelector').value; await db.collection('system').doc('config').update({ currentRound }); refreshCurrentView(); }
+  
   function refreshCurrentView() { if (currentUser?.role === 'admin') renderAdminView(); else if (currentUser?.role === 'trainer') renderTrainerView(); else renderFacilityUserView(); }
-  function getScoreClass(s) { if (s >= 85) return 'high'; if (s >= 70) return 'medium'; return 'low'; }
-
+  
   function selectFeedbackType(type) { selectedFeedbackType = type; document.querySelectorAll('.feedback-type-btn').forEach(btn => { if(btn.dataset.type === type) btn.classList.add('selected'); else btn.classList.remove('selected'); }); }
-
-  // Facility Head Direct Download Function
+  
+  // ==================== AUTHENTICATION ====================
+  async function login() {
+    const username = document.getElementById('loginUsername').value;
+    const password = document.getElementById('loginPassword').value;
+    
+    const user = users.find(u => u.username === username && u.password === password);
+    if (user) {
+      currentUser = user;
+      sessionStorage.setItem('eqa_current_user', JSON.stringify(user));
+      await showMainApp();
+    } else {
+      alert("Invalid credentials");
+    }
+  }
+  
+  async function registerFacility() {
+    const name = document.getElementById('regFacilityName').value;
+    const location = document.getElementById('regLocation').value;
+    const headName = document.getElementById('regHeadName').value;
+    const username = document.getElementById('regUsername').value;
+    const password = document.getElementById('regPassword').value;
+    
+    if (!name || !username) { alert("Fill required fields"); return; }
+    
+    const id = username.toUpperCase();
+    const newFacility = { id, name, location, headName, status: "Pending", username, password };
+    facilities.push(newFacility);
+    await saveToFirebase('facilities', id, newFacility);
+    
+    const newUser = { id, username, password, facilityId: id, facilityName: name, role: "facility" };
+    users.push(newUser);
+    await saveToFirebase('users', id, newUser);
+    
+    updateFacilityCount();
+    alert("Registration successful! Please login.");
+    document.getElementById('loginTabBtn').click();
+  }
+  
+  function logout() { currentUser = null; sessionStorage.removeItem('eqa_current_user'); showAuthView(); }
+  
+  // ==================== USER MANAGEMENT ====================
+  function renderUserTable() { let tbody = document.getElementById('userTableBody'); tbody.innerHTML = users.map(u => `<td>${escapeHtml(u.username)}</td><td><span class="role-badge role-${u.role}">${u.role}</span></td><td>${u.facilityName || '-'}</td><td><button class="btn-outline" style="padding:0.2rem 0.5rem;" onclick="deleteUser('${u.id}')"><i class="fas fa-trash"></i></button></td>`).join(''); }
+  
+  async function createUser() {
+    const username = document.getElementById('newUsername').value.trim();
+    const password = document.getElementById('newUserPassword').value;
+    const role = document.getElementById('newUserRole').value;
+    const facilityId = document.getElementById('newUserFacility').value;
+    
+    if (!username || !password) { alert("Username and password required"); return; }
+    if (users.find(u => u.username === username)) { alert("Username exists"); return; }
+    
+    const newId = "user_" + Date.now();
+    const facility = facilities.find(f => f.id === facilityId);
+    const newUser = { id: newId, username, password, role, facilityId: role === 'facility' ? facilityId : null, facilityName: facility?.name };
+    users.push(newUser);
+    await saveToFirebase('users', newId, newUser);
+    
+    renderUserTable();
+    document.getElementById('newUsername').value = '';
+    document.getElementById('newUserPassword').value = '';
+    alert("User created!");
+  }
+  
+  async function deleteUser(id) {
+    if (confirm("Delete user?")) {
+      users = users.filter(u => u.id !== id);
+      await deleteFromFirebase('users', id);
+      renderUserTable();
+    }
+  }
+  
+  // ==================== VIDEO MANAGEMENT ====================
+  async function uploadVideo() {
+    const title = document.getElementById('videoTitle').value.trim();
+    const file = document.getElementById('videoFile').files[0];
+    if (!title || !file) { alert("Enter title and select video"); return; }
+    
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+      const newVideo = { id: Date.now().toString(), title: title, data: e.target.result, type: file.type, name: file.name, uploaded: new Date().toLocaleString() };
+      trainingVideos.push(newVideo);
+      await saveToFirebase('videos', newVideo.id, newVideo);
+      renderVideoLibrary();
+      document.getElementById('videoTitle').value = '';
+      document.getElementById('videoFile').value = '';
+      alert("Video uploaded!");
+    };
+    reader.readAsDataURL(file);
+  }
+  
+  function renderVideoLibrary() {
+    let lib = document.getElementById('videoLibrary');
+    if (lib) lib.innerHTML = trainingVideos.map(v => `<div class="video-item"><video controls src="${v.data}"></video><div><strong>${escapeHtml(v.title)}</strong><br><small>${v.uploaded}</small></div><button class="btn-outline" style="margin-top:0.5rem;" onclick="deleteVideo('${v.id}')"><i class="fas fa-trash"></i> Delete</button></div>`).join('');
+    let trainerLib = document.getElementById('trainerVideoLibrary');
+    if (trainerLib) trainerLib.innerHTML = trainingVideos.map(v => `<div class="video-item"><video controls src="${v.data}"></video><div><strong>${escapeHtml(v.title)}</strong><br><small>${v.uploaded}</small></div></div>`).join('');
+  }
+  
+  async function deleteVideo(id) {
+    if (confirm("Delete video?")) {
+      trainingVideos = trainingVideos.filter(v => v.id != id);
+      await deleteFromFirebase('videos', id);
+      renderVideoLibrary();
+    }
+  }
+  
+  // ==================== FEEDBACK MANAGEMENT ====================
+  async function submitAdminFeedback() {
+    const facilityId = document.getElementById('adminFacilitySelect').value;
+    if (!facilityId) { alert("Select a facility"); return; }
+    const text = document.getElementById('adminFeedbackText').value.trim();
+    const fileInput = document.getElementById('adminFeedbackFile');
+    const attachments = [];
+    if (fileInput.files.length) { for(let f of fileInput.files) attachments.push(f.name); }
+    if (!text && attachments.length === 0) { alert("Enter feedback or attach file"); return; }
+    
+    if (!feedbackRecords[facilityId]) feedbackRecords[facilityId] = {};
+    if (!feedbackRecords[facilityId][currentYear]) feedbackRecords[facilityId][currentYear] = {};
+    if (!feedbackRecords[facilityId][currentYear][currentRound]) feedbackRecords[facilityId][currentYear][currentRound] = [];
+    
+    const newFeedback = { type: selectedFeedbackType, text: text || "(No text)", attachments: attachments, timestamp: new Date().toLocaleString(), submittedBy: "Admin" };
+    feedbackRecords[facilityId][currentYear][currentRound].unshift(newFeedback);
+    await saveToFirebase('feedback', facilityId, feedbackRecords[facilityId]);
+    
+    if (fileInput.files.length) {
+      for(let f of fileInput.files) {
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+          if (!facilityFiles[facilityId]) facilityFiles[facilityId] = {};
+          if (!facilityFiles[facilityId][currentYear]) facilityFiles[facilityId][currentYear] = {};
+          if (!facilityFiles[facilityId][currentYear][currentRound]) facilityFiles[facilityId][currentYear][currentRound] = [];
+          facilityFiles[facilityId][currentYear][currentRound].push({ name: f.name, data: e.target.result, type: f.type });
+          await saveToFirebase('files', facilityId, facilityFiles[facilityId]);
+        };
+        reader.readAsDataURL(f);
+      }
+    }
+    
+    document.getElementById('adminFeedbackText').value = '';
+    document.getElementById('adminFeedbackFile').value = '';
+    alert(`Feedback sent!`);
+    refreshCurrentView();
+  }
+  
+  // ==================== SCORE MANAGEMENT ====================
+  async function saveScores() {
+    const id = document.getElementById('scoresModal').dataset.facilityId;
+    if (!facilityScores[id]) facilityScores[id] = {};
+    if (!facilityScores[id][currentYear]) facilityScores[id][currentYear] = {};
+    facilityScores[id][currentYear][currentRound] = {
+      oss: parseInt(document.getElementById('scoreOss').value),
+      lqms: parseInt(document.getElementById('scoreLqms').value),
+      pt: parseInt(document.getElementById('scorePt').value),
+      rbr: parseInt(document.getElementById('scoreRbr').value)
+    };
+    await saveToFirebase('scores', id, facilityScores[id]);
+    
+    const file = document.getElementById('scoreFile');
+    if (file.files.length) {
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        if (!facilityFiles[id]) facilityFiles[id] = {};
+        if (!facilityFiles[id][currentYear]) facilityFiles[id][currentYear] = {};
+        if (!facilityFiles[id][currentYear][currentRound]) facilityFiles[id][currentYear][currentRound] = [];
+        facilityFiles[id][currentYear][currentRound].push({ name: file.files[0].name, data: e.target.result });
+        await saveToFirebase('files', id, facilityFiles[id]);
+        alert("Scores and file saved!");
+      };
+      reader.readAsDataURL(file.files[0]);
+    } else {
+      alert("Scores saved!");
+    }
+    closeScoresModal();
+    refreshCurrentView();
+  }
+  
+  function openScoresModal(id) {
+    let s = facilityScores[id]?.[currentYear]?.[currentRound] || {};
+    document.getElementById('scoreOss').value = s.oss || 70;
+    document.getElementById('scoreLqms').value = s.lqms || 70;
+    document.getElementById('scorePt').value = s.pt || 70;
+    document.getElementById('scoreRbr').value = s.rbr || 70;
+    document.getElementById('scoresModal').dataset.facilityId = id;
+    document.getElementById('scoresModal').style.display = 'flex';
+  }
+  
+  // ==================== FACILITY MANAGEMENT ====================
+  async function addNewFacility() {
+    const name = document.getElementById('facilityName').value;
+    const location = document.getElementById('facilityLocation').value;
+    const headName = document.getElementById('facilityHead').value;
+    const username = document.getElementById('facilityUsername').value;
+    const password = document.getElementById('facilityPassword').value;
+    const status = document.getElementById('facilityStatus').value;
+    
+    if (!name || !username) { alert("Required"); return; }
+    const id = username.toUpperCase();
+    const newFacility = { id, name, location, headName, status, username, password };
+    facilities.push(newFacility);
+    await saveToFirebase('facilities', id, newFacility);
+    
+    const newUser = { id, username, password, facilityId: id, facilityName: name, role: "facility" };
+    users.push(newUser);
+    await saveToFirebase('users', id, newUser);
+    
+    updateFacilityCount();
+    renderAdminView();
+    closeFacilityModal();
+  }
+  
+  async function deleteFacility(id) {
+    if (confirm("Delete facility and all associated data?")) {
+      facilities = facilities.filter(f => f.id !== id);
+      await deleteFromFirebase('facilities', id);
+      users = users.filter(u => u.facilityId !== id);
+      await deleteFromFirebase('users', id);
+      updateFacilityCount();
+      renderAdminView();
+    }
+  }
+  
+  // ==================== YEAR/ROUND MANAGEMENT ====================
+  async function addNewYear() {
+    const y = document.getElementById('newYear').value;
+    if (!y || years.includes(y)) { alert("Invalid or duplicate"); return; }
+    years.push(y);
+    roundsByYear[y] = ["Round 1"];
+    await db.collection('system').doc('config').update({ years, roundsByYear });
+    renderYearSelector();
+    closeYearModal();
+    refreshCurrentView();
+  }
+  
+  async function addNewRound() {
+    const r = document.getElementById('newRoundName').value.trim();
+    if (!r) return;
+    if (!roundsByYear[currentYear]) roundsByYear[currentYear] = [];
+    if (roundsByYear[currentYear].includes(r)) { alert("Exists"); return; }
+    roundsByYear[currentYear].push(r);
+    await db.collection('system').doc('config').update({ roundsByYear });
+    renderRoundSelector();
+    closeRoundModal();
+    refreshCurrentView();
+  }
+  
+  // ==================== REPORT FUNCTIONS ====================
+  function downloadComprehensiveReport() {
+    let data = facilities.map(f => {
+      let s = facilityScores[f.id]?.[currentYear]?.[currentRound] || {};
+      return {
+        "Facility": f.name, "Location": f.location, "Head": f.headName,
+        "OSS": s.oss || 0, "LQMS": s.lqms || 0, "PT": s.pt || 0, "RBR": s.rbr || 0,
+        "Avg": Math.round(((s.oss || 0) + (s.lqms || 0) + (s.pt || 0) + (s.rbr || 0)) / 4),
+        "Feedback": (feedbackRecords[f.id]?.[currentYear]?.[currentRound] || []).length,
+        "Year": currentYear, "Round": currentRound
+      };
+    });
+    let ws = XLSX.utils.json_to_sheet(data);
+    let wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `EQA_${currentYear}_${currentRound}`);
+    XLSX.writeFile(wb, `EQA_Report_${currentYear}_${currentRound}.xlsx`);
+    alert("Report downloaded!");
+  }
+  
+  function downloadFacilityReport(id) {
+    let f = facilities.find(f => f.id === id);
+    let s = facilityScores[id]?.[currentYear]?.[currentRound] || {};
+    let data = [{
+      "Facility": f.name, "Location": f.location, "Head": f.headName,
+      "Year": currentYear, "Round": currentRound,
+      "OSS": s.oss || 0, "LQMS": s.lqms || 0, "PT": s.pt || 0, "RBR": s.rbr || 0,
+      "Average": Math.round(((s.oss || 0) + (s.lqms || 0) + (s.pt || 0) + (s.rbr || 0)) / 4),
+      "Report Date": new Date().toLocaleString()
+    }];
+    let ws = XLSX.utils.json_to_sheet(data);
+    let wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `${f.name}_Report`);
+    XLSX.writeFile(wb, `${f.name}_${currentYear}_${currentRound}_Report.xlsx`);
+    alert("Report downloaded!");
+  }
+  
   function downloadSentFile(fileName, fileData, fileType) {
     try {
-      // Create a download link for the file
       const link = document.createElement('a');
       link.href = fileData;
       link.download = fileName;
@@ -210,70 +633,171 @@
       alert('Error downloading file. Please try again.');
     }
   }
-
-  // User Management Functions
-  function renderUserTable() { let tbody = document.getElementById('userTableBody'); tbody.innerHTML = users.map(u => `<tr><td>${escapeHtml(u.username)}</td><td><span class="role-badge role-${u.role}">${u.role}</span></td><td>${u.facilityName || '-'}</td><td><button class="btn-outline" style="padding:0.2rem 0.5rem;" onclick="deleteUser('${u.id}')"><i class="fas fa-trash"></i></button></td></tr>`).join(''); }
-  function createUser() { let username = document.getElementById('newUsername').value.trim(); let password = document.getElementById('newUserPassword').value; let role = document.getElementById('newUserRole').value; let facilityId = document.getElementById('newUserFacility').value; if (!username || !password) { alert("Username and password required"); return; } if (users.find(u => u.username === username)) { alert("Username exists"); return; } let newId = "user_" + Date.now(); let facility = facilities.find(f => f.id === facilityId); users.push({ id: newId, username, password, role, facilityId: role === 'facility' ? facilityId : null, facilityName: facility?.name }); saveToLocalStorage(); renderUserTable(); document.getElementById('newUsername').value = ''; document.getElementById('newUserPassword').value = ''; alert("User created!"); }
-  function deleteUser(id) { if (confirm("Delete user?")) { users = users.filter(u => u.id !== id); saveToLocalStorage(); renderUserTable(); } }
-
-  // Video Management
-  function uploadVideo() { let title = document.getElementById('videoTitle').value.trim(); let file = document.getElementById('videoFile').files[0]; if (!title || !file) { alert("Enter title and select video"); return; } let reader = new FileReader(); reader.onload = function(e) { trainingVideos.push({ id: Date.now(), title: title, data: e.target.result, type: file.type, name: file.name, uploaded: new Date().toLocaleString() }); saveToLocalStorage(); renderVideoLibrary(); document.getElementById('videoTitle').value = ''; document.getElementById('videoFile').value = ''; alert("Video uploaded!"); }; reader.readAsDataURL(file); }
-  function renderVideoLibrary() { let lib = document.getElementById('videoLibrary'); if (lib) lib.innerHTML = trainingVideos.map(v => `<div class="video-item"><video controls src="${v.data}"></video><div><strong>${escapeHtml(v.title)}</strong><br><small>${v.uploaded}</small></div><button class="btn-outline" style="margin-top:0.5rem;" onclick="deleteVideo('${v.id}')"><i class="fas fa-trash"></i> Delete</button></div>`).join(''); let trainerLib = document.getElementById('trainerVideoLibrary'); if (trainerLib) trainerLib.innerHTML = trainingVideos.map(v => `<div class="video-item"><video controls src="${v.data}"></video><div><strong>${escapeHtml(v.title)}</strong><br><small>${v.uploaded}</small></div></div>`).join(''); }
-  function deleteVideo(id) { if (confirm("Delete video?")) { trainingVideos = trainingVideos.filter(v => v.id != id); saveToLocalStorage(); renderVideoLibrary(); } }
-
-  function submitAdminFeedback() { let facilityId = document.getElementById('adminFacilitySelect').value; if (!facilityId) { alert("Select a facility"); return; } let text = document.getElementById('adminFeedbackText').value.trim(); let fileInput = document.getElementById('adminFeedbackFile'); let attachments = []; if (fileInput.files.length) { for(let f of fileInput.files) attachments.push(f.name); } if (!text && attachments.length === 0) { alert("Enter feedback or attach file"); return; } if (!feedbackRecords[facilityId]) feedbackRecords[facilityId] = {}; if (!feedbackRecords[facilityId][currentYear]) feedbackRecords[facilityId][currentYear] = {}; if (!feedbackRecords[facilityId][currentYear][currentRound]) feedbackRecords[facilityId][currentYear][currentRound] = []; feedbackRecords[facilityId][currentYear][currentRound].unshift({ type: selectedFeedbackType, text: text || "(No text)", attachments: attachments, timestamp: new Date().toLocaleString(), submittedBy: "Admin" }); if (fileInput.files.length) { for(let f of fileInput.files) { let reader = new FileReader(); reader.onload = function(e) { if (!facilityFiles[facilityId]) facilityFiles[facilityId] = {}; if (!facilityFiles[facilityId][currentYear]) facilityFiles[facilityId][currentYear] = {}; if (!facilityFiles[facilityId][currentYear][currentRound]) facilityFiles[facilityId][currentYear][currentRound] = []; facilityFiles[facilityId][currentYear][currentRound].push({ name: f.name, data: e.target.result, type: f.type }); saveToLocalStorage(); }; reader.readAsDataURL(f); } } document.getElementById('adminFeedbackText').value = ''; document.getElementById('adminFeedbackFile').value = ''; saveToLocalStorage(); alert(`Feedback sent!`); refreshCurrentView(); }
-
+  
+  // ==================== RENDER FUNCTIONS ====================
   function renderAdminView() {
-    let grid = document.getElementById('adminFacilityGrid'); grid.innerHTML = facilities.map(f => { let s = facilityScores[f.id]?.[currentYear]?.[currentRound] || {}; return `<div class="status-facility-card" onclick="viewFacilityDetail('${f.id}')"><div style="display:flex; justify-content:space-between;"><div><strong>${escapeHtml(f.name)}</strong><br><small>${escapeHtml(f.location)}</small></div><button onclick="event.stopPropagation(); deleteFacility('${f.id}')" style="background:none; border:none; color:#dc2626;"><i class="fas fa-trash"></i></button></div><div class="scores-container"><div class="score-item">OSS<br><span class="score-value ${getScoreClass(s.oss||0)}">${s.oss||0}%</span></div><div class="score-item">LQMS<br><span class="score-value ${getScoreClass(s.lqms||0)}">${s.lqms||0}%</span></div><div class="score-item">PT<br><span class="score-value ${getScoreClass(s.pt||0)}">${s.pt||0}%</span></div><div class="score-item">RBR<br><span class="score-value ${getScoreClass(s.rbr||0)}">${s.rbr||0}%</span></div></div><button class="btn-outline" style="width:100%; margin-top:0.5rem;" onclick="event.stopPropagation(); openScoresModal('${f.id}')"><i class="fas fa-edit"></i> Edit Scores</button></div>`; }).join('');
-    let select = document.getElementById('adminFacilitySelect'); if(select) select.innerHTML = facilities.map(f => `<option value="${f.id}">${escapeHtml(f.name)} (${escapeHtml(f.location)})</option>`).join('');
-    let facilitySelect = document.getElementById('newUserFacility'); if(facilitySelect) facilitySelect.innerHTML = `<option value="">-- No Facility (for Admin/Trainer) --</option>` + facilities.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
-    renderUserTable(); renderVideoLibrary();
+    let grid = document.getElementById('adminFacilityGrid');
+    if (!grid) return;
+    grid.innerHTML = facilities.map(f => {
+      let s = facilityScores[f.id]?.[currentYear]?.[currentRound] || {};
+      return `<div class="status-facility-card" onclick="viewFacilityDetail('${f.id}')"><div style="display:flex; justify-content:space-between;"><div><strong>${escapeHtml(f.name)}</strong><br><small>${escapeHtml(f.location)}</small></div><button onclick="event.stopPropagation(); deleteFacility('${f.id}')" style="background:none; border:none; color:#dc2626;"><i class="fas fa-trash"></i></button></div><div class="scores-container"><div class="score-item">OSS<br><span class="score-value ${getScoreClass(s.oss || 0)}">${s.oss || 0}%</span></div><div class="score-item">LQMS<br><span class="score-value ${getScoreClass(s.lqms || 0)}">${s.lqms || 0}%</span></div><div class="score-item">PT<br><span class="score-value ${getScoreClass(s.pt || 0)}">${s.pt || 0}%</span></div><div class="score-item">RBR<br><span class="score-value ${getScoreClass(s.rbr || 0)}">${s.rbr || 0}%</span></div></div><button class="btn-outline" style="width:100%; margin-top:0.5rem;" onclick="event.stopPropagation(); openScoresModal('${f.id}')"><i class="fas fa-edit"></i> Edit Scores</button></div>`;
+    }).join('');
+    
+    let select = document.getElementById('adminFacilitySelect');
+    if (select) select.innerHTML = facilities.map(f => `<option value="${f.id}">${escapeHtml(f.name)} (${escapeHtml(f.location)})</option>`).join('');
+    
+    let facilitySelect = document.getElementById('newUserFacility');
+    if (facilitySelect) facilitySelect.innerHTML = `<option value="">-- Select Facility --</option>` + facilities.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
+    
+    renderUserTable();
+    renderVideoLibrary();
   }
-
+  
   function renderTrainerView() {
-    let select = document.getElementById('trainerFacilitySelect'); if(select) select.innerHTML = facilities.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
-    renderVideoLibrary(); if(select && facilities.length) loadTrainerFacilityData();
+    let select = document.getElementById('trainerFacilitySelect');
+    if (select) select.innerHTML = facilities.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
+    renderVideoLibrary();
+    if (select && facilities.length) loadTrainerFacilityData();
   }
-
-  function loadTrainerFacilityData() { let id = document.getElementById('trainerFacilitySelect').value; if(!id) return; let f = facilities.find(f=>f.id===id); let s = facilityScores[id]?.[currentYear]?.[currentRound] || {}; let fb = feedbackRecords[id]?.[currentYear]?.[currentRound] || []; let html = `<div style="margin-top:1rem; padding:1rem; background:#f8fafc; border-radius:16px;"><h4>${escapeHtml(f.name)} - ${currentYear} ${currentRound}</h4><div style="display:flex; gap:1rem; margin:0.5rem 0;"><div>OSS: ${s.oss||0}%</div><div>LQMS: ${s.lqms||0}%</div><div>PT: ${s.pt||0}%</div><div>RBR: ${s.rbr||0}%</div></div><h5>Feedback:</h5>${fb.length ? fb.map(fb=>`<div class="feedback-item"><span class="feedback-type-badge feedback-type-${fb.type}">${fb.type}</span><div>${escapeHtml(fb.text)}</div><small>${fb.timestamp}</small></div>`).join('') : '<p>No feedback</p>'}</div>`; document.getElementById('trainerFacilityData').innerHTML = html; }
-
+  
+  function loadTrainerFacilityData() {
+    let id = document.getElementById('trainerFacilitySelect').value;
+    if (!id) return;
+    let f = facilities.find(f => f.id === id);
+    let s = facilityScores[id]?.[currentYear]?.[currentRound] || {};
+    let fb = feedbackRecords[id]?.[currentYear]?.[currentRound] || [];
+    let html = `<div style="margin-top:1rem; padding:1rem; background:#f8fafc; border-radius:16px;"><h4>${escapeHtml(f.name)} - ${currentYear} ${currentRound}</h4><div style="display:flex; gap:1rem; margin:0.5rem 0;"><div>OSS: ${s.oss || 0}%</div><div>LQMS: ${s.lqms || 0}%</div><div>PT: ${s.pt || 0}%</div><div>RBR: ${s.rbr || 0}%</div></div><h5>Feedback:</h5>${fb.length ? fb.map(fb => `<div class="feedback-item"><span class="feedback-type-badge feedback-type-${fb.type}">${fb.type}</span><div>${escapeHtml(fb.text)}</div><small>${fb.timestamp}</small></div>`).join('') : '<p>No feedback</p>'}</div>`;
+    document.getElementById('trainerFacilityData').innerHTML = html;
+  }
+  
   function renderFacilityUserView() {
-    let f = facilities.find(f => f.id === currentUser.facilityId); if (!f) return;
+    let f = facilities.find(f => f.id === currentUser.facilityId);
+    if (!f) return;
     let s = facilityScores[f.id]?.[currentYear]?.[currentRound] || {};
     let fb = feedbackRecords[f.id]?.[currentYear]?.[currentRound] || [];
     let files = facilityFiles[f.id]?.[currentYear]?.[currentRound] || [];
-    let html = `<div class="admin-panel"><div style="background:linear-gradient(135deg,#eef2f6,white); padding:1.5rem; border-radius:20px;"><h2>${escapeHtml(f.name)}</h2><p>${escapeHtml(f.location)} | Head: ${escapeHtml(f.headName)}</p><div style="display:flex; gap:1rem; flex-wrap:wrap;"><div><strong>OSS:</strong> <span class="${getScoreClass(s.oss||0)}">${s.oss||0}%</span></div><div><strong>LQMS:</strong> <span class="${getScoreClass(s.lqms||0)}">${s.lqms||0}%</span></div><div><strong>PT:</strong> <span class="${getScoreClass(s.pt||0)}">${s.pt||0}%</span></div><div><strong>RBR:</strong> <span class="${getScoreClass(s.rbr||0)}">${s.rbr||0}%</span></div></div></div><div class="report-section"><span><i class="fas fa-video"></i> Training Videos</span><button class="btn-primary" onclick="downloadFacilityReport('${f.id}')"><i class="fas fa-download"></i> Download Report</button></div><div class="video-grid">${trainingVideos.map(v => `<div class="video-item"><video controls src="${v.data}"></video><div><strong>${escapeHtml(v.title)}</strong></div></div>`).join('')}</div><h3><i class="fas fa-file-alt"></i> EQA Center Uploads</h3><div>${files.length ? files.map(fi => `<div class="attachment-file" onclick="downloadSentFile('${fi.name}', '${fi.data}', '${fi.type || 'application/octet-stream'}')"><i class="fas fa-download"></i> ${escapeHtml(fi.name)}</div>`).join('') : '<p>No files uploaded yet.</p>'}</div><h3><i class="fas fa-history"></i> Feedback History - ${currentYear} ${currentRound}</h3><div class="feedback-list">${fb.length ? fb.map(fb => `<div class="feedback-item"><span class="feedback-type-badge feedback-type-${fb.type}">${fb.type.toUpperCase()}</span><div>${escapeHtml(fb.text)}</div><div style="font-size:0.7rem;">${fb.timestamp}</div>${fb.attachments?.length ? `<div><i class="fas fa-paperclip"></i> ${fb.attachments.join(', ')}</div>` : ''}</div>`).join('') : '<p>No feedback yet.</p>'}</div></div>`;
+    let html = `<div class="admin-panel"><div style="background:linear-gradient(135deg,#eef2f6,white); padding:1.5rem; border-radius:20px;"><h2>${escapeHtml(f.name)}</h2><p>${escapeHtml(f.location)} | Head: ${escapeHtml(f.headName)}</p><div style="display:flex; gap:1rem; flex-wrap:wrap;"><div><strong>OSS:</strong> <span class="${getScoreClass(s.oss || 0)}">${s.oss || 0}%</span></div><div><strong>LQMS:</strong> <span class="${getScoreClass(s.lqms || 0)}">${s.lqms || 0}%</span></div><div><strong>PT:</strong> <span class="${getScoreClass(s.pt || 0)}">${s.pt || 0}%</span></div><div><strong>RBR:</strong> <span class="${getScoreClass(s.rbr || 0)}">${s.rbr || 0}%</span></div></div></div><div class="report-section"><span><i class="fas fa-video"></i> Training Videos</span><button class="btn-primary" onclick="downloadFacilityReport('${f.id}')"><i class="fas fa-download"></i> Download Report</button></div><div class="video-grid">${trainingVideos.map(v => `<div class="video-item"><video controls src="${v.data}"></video><div><strong>${escapeHtml(v.title)}</strong></div></div>`).join('')}</div><h3><i class="fas fa-file-alt"></i> EQA Center Uploads</h3><div>${files.length ? files.map(fi => `<div class="attachment-file" onclick="downloadSentFile('${fi.name}', '${fi.data}', '${fi.type || 'application/octet-stream'}')"><i class="fas fa-download"></i> ${escapeHtml(fi.name)}</div>`).join('') : '<p>No files uploaded yet.</p>'}</div><h3><i class="fas fa-history"></i> Feedback History - ${currentYear} ${currentRound}</h3><div class="feedback-list">${fb.length ? fb.map(fb => `<div class="feedback-item"><span class="feedback-type-badge feedback-type-${fb.type}">${fb.type.toUpperCase()}</span><div>${escapeHtml(fb.text)}</div><div style="font-size:0.7rem;">${fb.timestamp}</div>${fb.attachments?.length ? `<div><i class="fas fa-paperclip"></i> ${fb.attachments.join(', ')}</div>` : ''}</div>`).join('') : '<p>No feedback yet.</p>'}</div></div>`;
     document.getElementById('facilityDashboard').innerHTML = html;
   }
-
-  function viewFacilityDetail(id) { let f = facilities.find(f => f.id === id); let fb = feedbackRecords[id]?.[currentYear]?.[currentRound] || []; let files = facilityFiles[id]?.[currentYear]?.[currentRound] || []; let s = facilityScores[id]?.[currentYear]?.[currentRound] || {}; let html = `<div><h2>${escapeHtml(f.name)}</h2><p>${escapeHtml(f.location)} | Head: ${escapeHtml(f.headName)}</p><div style="display:flex; gap:1rem;"><div><strong>OSS:</strong> ${s.oss||0}%</div><div><strong>LQMS:</strong> ${s.lqms||0}%</div><div><strong>PT:</strong> ${s.pt||0}%</div><div><strong>RBR:</strong> ${s.rbr||0}%</div></div><button class="btn-primary" onclick="downloadFacilityReport('${id}')"><i class="fas fa-download"></i> Download Report</button></div><h3>Uploaded Files</h3>${files.length ? files.map(fi => `<div class="attachment-file" onclick="downloadSentFile('${fi.name}', '${fi.data}', '${fi.type || 'application/octet-stream'}')"><i class="fas fa-download"></i> ${escapeHtml(fi.name)}</div>`).join('') : '<p>No files</p>'}<h3>Feedback</h3>${fb.length ? fb.map(fb => `<div class="feedback-item"><span class="feedback-type-badge feedback-type-${fb.type}">${fb.type}</span><div>${escapeHtml(fb.text)}</div><small>${fb.timestamp}</small></div>`).join('') : '<p>No feedback</p>'}`;
-    document.getElementById('facilityDetailContent').innerHTML = html; document.getElementById('facilityUserView').style.display = 'none'; document.getElementById('facilityDetailView').style.display = 'block'; document.getElementById('adminPanel').style.display = 'none'; }
-
-  function openScoresModal(id) { let s = facilityScores[id]?.[currentYear]?.[currentRound] || {}; document.getElementById('scoreOss').value = s.oss||70; document.getElementById('scoreLqms').value = s.lqms||70; document.getElementById('scorePt').value = s.pt||70; document.getElementById('scoreRbr').value = s.rbr||70; document.getElementById('scoresModal').dataset.facilityId = id; document.getElementById('scoresModal').style.display = 'flex'; }
-  function saveScores() { let id = document.getElementById('scoresModal').dataset.facilityId; if (!facilityScores[id]) facilityScores[id] = {}; if (!facilityScores[id][currentYear]) facilityScores[id][currentYear] = {}; facilityScores[id][currentYear][currentRound] = { oss: parseInt(document.getElementById('scoreOss').value), lqms: parseInt(document.getElementById('scoreLqms').value), pt: parseInt(document.getElementById('scorePt').value), rbr: parseInt(document.getElementById('scoreRbr').value) }; let file = document.getElementById('scoreFile'); if (file.files.length) { let reader = new FileReader(); reader.onload = function(e) { if (!facilityFiles[id]) facilityFiles[id] = {}; if (!facilityFiles[id][currentYear]) facilityFiles[id][currentYear] = {}; if (!facilityFiles[id][currentYear][currentRound]) facilityFiles[id][currentYear][currentRound] = []; facilityFiles[id][currentYear][currentRound].push({ name: file.files[0].name, data: e.target.result }); saveToLocalStorage(); alert("Scores and file saved!"); }; reader.readAsDataURL(file.files[0]); } else { saveToLocalStorage(); alert("Scores saved!"); } closeScoresModal(); refreshCurrentView(); }
-  function downloadComprehensiveReport() { let data = facilities.map(f => { let s = facilityScores[f.id]?.[currentYear]?.[currentRound] || {}; return { "Facility": f.name, "Location": f.location, "Head": f.headName, "OSS": s.oss||0, "LQMS": s.lqms||0, "PT": s.pt||0, "RBR": s.rbr||0, "Avg": Math.round(((s.oss||0)+(s.lqms||0)+(s.pt||0)+(s.rbr||0))/4), "Feedback": (feedbackRecords[f.id]?.[currentYear]?.[currentRound]||[]).length, "Year": currentYear, "Round": currentRound }; }); let ws = XLSX.utils.json_to_sheet(data); let wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, `EQA_${currentYear}_${currentRound}`); XLSX.writeFile(wb, `EQA_Report_${currentYear}_${currentRound}.xlsx`); alert("Report downloaded!"); }
-  function downloadFacilityReport(id) { let f = facilities.find(f=>f.id===id); let s = facilityScores[id]?.[currentYear]?.[currentRound] || {}; let data = [{ "Facility": f.name, "Location": f.location, "Head": f.headName, "Year": currentYear, "Round": currentRound, "OSS": s.oss||0, "LQMS": s.lqms||0, "PT": s.pt||0, "RBR": s.rbr||0, "Average": Math.round(((s.oss||0)+(s.lqms||0)+(s.pt||0)+(s.rbr||0))/4), "Report Date": new Date().toLocaleString() }]; let ws = XLSX.utils.json_to_sheet(data); let wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, `${f.name}_Report`); XLSX.writeFile(wb, `${f.name}_${currentYear}_${currentRound}_Report.xlsx`); alert("Report downloaded!"); }
-  function downloadFile(name, dataUrl) { let a = document.createElement('a'); a.href = dataUrl; a.download = name; a.click(); }
-  function login() { let u = users.find(u => u.username === document.getElementById('loginUsername').value && u.password === document.getElementById('loginPassword').value); if (u) { currentUser = u; sessionStorage.setItem('eqa_current_user', JSON.stringify(u)); showMainApp(); } else alert("Invalid credentials"); }
-  function registerFacility() { let n = document.getElementById('regFacilityName').value, l = document.getElementById('regLocation').value, h = document.getElementById('regHeadName').value, un = document.getElementById('regUsername').value, pw = document.getElementById('regPassword').value; if (!n || !un) { alert("Fill required fields"); return; } let id = un.toUpperCase(); facilities.push({ id, name: n, location: l, headName: h, status: "Pending", username: un, password: pw }); facilityScores[id] = {}; feedbackRecords[id] = {}; facilityFiles[id] = {}; users.push({ id, username: un, password: pw, facilityId: id, facilityName: n, role: "facility" }); saveToLocalStorage(); updateFacilityCount(); alert("Registration successful!"); document.getElementById('loginTabBtn').click(); }
-  function addNewFacility() { let n = document.getElementById('facilityName').value, l = document.getElementById('facilityLocation').value, h = document.getElementById('facilityHead').value, un = document.getElementById('facilityUsername').value, pw = document.getElementById('facilityPassword').value, st = document.getElementById('facilityStatus').value; if (!n || !un) { alert("Required"); return; } let id = un.toUpperCase(); facilities.push({ id, name: n, location: l, headName: h, status: st, username: un, password: pw }); facilityScores[id] = {}; feedbackRecords[id] = {}; facilityFiles[id] = {}; users.push({ id, username: un, password: pw, facilityId: id, facilityName: n, role: "facility" }); saveToLocalStorage(); updateFacilityCount(); renderAdminView(); closeFacilityModal(); }
-  function deleteFacility(id) { if (confirm("Delete?")) { facilities = facilities.filter(f => f.id !== id); delete facilityScores[id]; delete feedbackRecords[id]; delete facilityFiles[id]; users = users.filter(u => u.facilityId !== id); saveToLocalStorage(); updateFacilityCount(); renderAdminView(); } }
-  function addNewYear() { let y = document.getElementById('newYear').value; if (!y || years.includes(y)) { alert("Invalid or duplicate"); return; } years.push(y); roundsByYear[y] = ["Round 1"]; saveToLocalStorage(); renderYearSelector(); closeYearModal(); refreshCurrentView(); }
-  function addNewRound() { let r = document.getElementById('newRoundName').value.trim(); if (!r) return; if (!roundsByYear[currentYear]) roundsByYear[currentYear] = []; if (roundsByYear[currentYear].includes(r)) { alert("Exists"); return; } roundsByYear[currentYear].push(r); saveToLocalStorage(); renderRoundSelector(); closeRoundModal(); refreshCurrentView(); }
-  function showMainApp() { document.getElementById('authView').style.display = 'none'; document.getElementById('mainAppView').style.display = 'block'; document.getElementById('userNameDisplay').innerText = currentUser.username; let roleText = currentUser.role === 'admin' ? ' (Administrator)' : (currentUser.role === 'trainer' ? ' (Trainer)' : ' (Facility Head)'); document.getElementById('userRoleDisplay').innerHTML = roleText; renderYearSelector(); renderRoundSelector(); if (currentUser.role === 'admin') { document.getElementById('adminPanel').style.display = 'block'; document.getElementById('trainerView').style.display = 'none'; document.getElementById('facilityUserView').style.display = 'none'; renderAdminView(); } else if (currentUser.role === 'trainer') { document.getElementById('adminPanel').style.display = 'none'; document.getElementById('trainerView').style.display = 'block'; document.getElementById('facilityUserView').style.display = 'none'; renderTrainerView(); } else { document.getElementById('adminPanel').style.display = 'none'; document.getElementById('trainerView').style.display = 'none'; document.getElementById('facilityUserView').style.display = 'block'; document.getElementById('facilityDetailView').style.display = 'none'; let f = facilities.find(f=>f.id===currentUser.facilityId); document.getElementById('facilityNameDisplay').innerHTML = f ? `<i class="fas fa-hospital"></i> ${f.name}` : ''; renderFacilityUserView(); } }
-  function logout() { currentUser = null; sessionStorage.removeItem('eqa_current_user'); showAuthView(); }
-  function showAuthView() { document.getElementById('authView').style.display = 'block'; document.getElementById('mainAppView').style.display = 'none'; }
+  
+  function viewFacilityDetail(id) {
+    let f = facilities.find(f => f.id === id);
+    let fb = feedbackRecords[id]?.[currentYear]?.[currentRound] || [];
+    let files = facilityFiles[id]?.[currentYear]?.[currentRound] || [];
+    let s = facilityScores[id]?.[currentYear]?.[currentRound] || {};
+    let html = `<div><h2>${escapeHtml(f.name)}</h2><p>${escapeHtml(f.location)} | Head: ${escapeHtml(f.headName)}</p><div style="display:flex; gap:1rem;"><div><strong>OSS:</strong> ${s.oss || 0}%</div><div><strong>LQMS:</strong> ${s.lqms || 0}%</div><div><strong>PT:</strong> ${s.pt || 0}%</div><div><strong>RBR:</strong> ${s.rbr || 0}%</div></div><button class="btn-primary" onclick="downloadFacilityReport('${id}')"><i class="fas fa-download"></i> Download Report</button></div><h3>Uploaded Files</h3>${files.length ? files.map(fi => `<div class="attachment-file" onclick="downloadSentFile('${fi.name}', '${fi.data}', '${fi.type || 'application/octet-stream'}')"><i class="fas fa-download"></i> ${escapeHtml(fi.name)}</div>`).join('') : '<p>No files</p>'}<h3>Feedback</h3>${fb.length ? fb.map(fb => `<div class="feedback-item"><span class="feedback-type-badge feedback-type-${fb.type}">${fb.type}</span><div>${escapeHtml(fb.text)}</div><small>${fb.timestamp}</small></div>`).join('') : '<p>No feedback</p>'}`;
+    document.getElementById('facilityDetailContent').innerHTML = html;
+    document.getElementById('facilityUserView').style.display = 'none';
+    document.getElementById('facilityDetailView').style.display = 'block';
+    document.getElementById('adminPanel').style.display = 'none';
+  }
+  
+  // ==================== INITIALIZATION ====================
+  async function showMainApp() {
+    await loadAllData();
+    document.getElementById('authView').style.display = 'none';
+    document.getElementById('mainAppView').style.display = 'block';
+    document.getElementById('userNameDisplay').innerText = currentUser.username;
+    let roleText = currentUser.role === 'admin' ? ' (Administrator)' : (currentUser.role === 'trainer' ? ' (Trainer)' : ' (Facility Head)');
+    document.getElementById('userRoleDisplay').innerHTML = roleText;
+    
+    if (currentUser.role === 'admin') {
+      document.getElementById('adminPanel').style.display = 'block';
+      document.getElementById('trainerView').style.display = 'none';
+      document.getElementById('facilityUserView').style.display = 'none';
+      renderAdminView();
+    } else if (currentUser.role === 'trainer') {
+      document.getElementById('adminPanel').style.display = 'none';
+      document.getElementById('trainerView').style.display = 'block';
+      document.getElementById('facilityUserView').style.display = 'none';
+      renderTrainerView();
+    } else {
+      document.getElementById('adminPanel').style.display = 'none';
+      document.getElementById('trainerView').style.display = 'none';
+      document.getElementById('facilityUserView').style.display = 'block';
+      document.getElementById('facilityDetailView').style.display = 'none';
+      let f = facilities.find(f => f.id === currentUser.facilityId);
+      document.getElementById('facilityNameDisplay').innerHTML = f ? `<i class="fas fa-hospital"></i> ${f.name}` : '';
+      renderFacilityUserView();
+    }
+  }
+  
+  function showAuthView() {
+    document.getElementById('authView').style.display = 'block';
+    document.getElementById('mainAppView').style.display = 'none';
+  }
+  
   function closeScoresModal() { document.getElementById('scoresModal').style.display = 'none'; document.getElementById('scoreFile').value = ''; }
   function closeYearModal() { document.getElementById('yearModal').style.display = 'none'; }
   function closeRoundModal() { document.getElementById('roundModal').style.display = 'none'; }
   function closeFacilityModal() { document.getElementById('facilityModal').style.display = 'none'; }
   function openAddYearModal() { document.getElementById('yearModal').style.display = 'flex'; }
   function openAddRoundModal() { document.getElementById('roundModal').style.display = 'flex'; }
-  function setupEventListeners() { document.getElementById('loginTabBtn').onclick = () => { document.getElementById('loginTabBtn').classList.add('active'); document.getElementById('registerTabBtn').classList.remove('active'); document.getElementById('loginForm').style.display = 'block'; document.getElementById('registerForm').style.display = 'none'; }; document.getElementById('registerTabBtn').onclick = () => { document.getElementById('registerTabBtn').classList.add('active'); document.getElementById('loginTabBtn').classList.remove('active'); document.getElementById('loginForm').style.display = 'none'; document.getElementById('registerForm').style.display = 'block'; }; document.getElementById('addFacilityBtn').onclick = () => document.getElementById('facilityModal').style.display = 'flex'; document.getElementById('backToDashboardBtn').onclick = () => { document.getElementById('facilityDetailView').style.display = 'none'; document.getElementById('facilityUserView').style.display = 'block'; if(currentUser?.role === 'admin') document.getElementById('adminPanel').style.display = 'block'; else renderFacilityUserView(); }; }
-  function escapeHtml(s) { if (!s) return ''; return s.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m])); }
   
-  window.login = login; window.logout = logout; window.registerFacility = registerFacility; window.changeYear = changeYear; window.changeRound = changeRound; window.addNewYear = addNewYear; window.addNewRound = addNewRound; window.viewFacilityDetail = viewFacilityDetail; window.deleteFacility = deleteFacility; window.openScoresModal = openScoresModal; window.saveScores = saveScores; window.downloadComprehensiveReport = downloadComprehensiveReport; window.downloadFacilityReport = downloadFacilityReport; window.downloadFile = downloadFile; window.downloadSentFile = downloadSentFile; window.addNewFacility = addNewFacility; window.closeYearModal = closeYearModal; window.closeRoundModal = closeRoundModal; window.closeFacilityModal = closeFacilityModal; window.closeScoresModal = closeScoresModal; window.openAddYearModal = openAddYearModal; window.openAddRoundModal = openAddRoundModal; window.selectFeedbackType = selectFeedbackType; window.submitAdminFeedback = submitAdminFeedback; window.uploadVideo = uploadVideo; window.deleteVideo = deleteVideo; window.createUser = createUser; window.deleteUser = deleteUser; window.loadTrainerFacilityData = loadTrainerFacilityData;
-  init();
+  function setupEventListeners() {
+    document.getElementById('loginTabBtn').onclick = () => {
+      document.getElementById('loginTabBtn').classList.add('active');
+      document.getElementById('registerTabBtn').classList.remove('active');
+      document.getElementById('loginForm').style.display = 'block';
+      document.getElementById('registerForm').style.display = 'none';
+    };
+    document.getElementById('registerTabBtn').onclick = () => {
+      document.getElementById('registerTabBtn').classList.add('active');
+      document.getElementById('loginTabBtn').classList.remove('active');
+      document.getElementById('loginForm').style.display = 'none';
+      document.getElementById('registerForm').style.display = 'block';
+    };
+    const addFacilityBtn = document.getElementById('addFacilityBtn');
+    if (addFacilityBtn) addFacilityBtn.onclick = () => document.getElementById('facilityModal').style.display = 'flex';
+    const backBtn = document.getElementById('backToDashboardBtn');
+    if (backBtn) backBtn.onclick = () => {
+      document.getElementById('facilityDetailView').style.display = 'none';
+      document.getElementById('facilityUserView').style.display = 'block';
+      if (currentUser?.role === 'admin') document.getElementById('adminPanel').style.display = 'block';
+      else renderFacilityUserView();
+    };
+  }
+  
+  // Check for existing session
+  const savedUser = sessionStorage.getItem('eqa_current_user');
+  if (savedUser) {
+    currentUser = JSON.parse(savedUser);
+    showMainApp();
+  } else {
+    showAuthView();
+  }
+  
+  setupEventListeners();
+  
+  // Expose functions globally
+  window.login = login;
+  window.logout = logout;
+  window.registerFacility = registerFacility;
+  window.changeYear = changeYear;
+  window.changeRound = changeRound;
+  window.addNewYear = addNewYear;
+  window.addNewRound = addNewRound;
+  window.viewFacilityDetail = viewFacilityDetail;
+  window.deleteFacility = deleteFacility;
+  window.openScoresModal = openScoresModal;
+  window.saveScores = saveScores;
+  window.downloadComprehensiveReport = downloadComprehensiveReport;
+  window.downloadFacilityReport = downloadFacilityReport;
+  window.downloadSentFile = downloadSentFile;
+  window.addNewFacility = addNewFacility;
+  window.closeYearModal = closeYearModal;
+  window.closeRoundModal = closeRoundModal;
+  window.closeFacilityModal = closeFacilityModal;
+  window.closeScoresModal = closeScoresModal;
+  window.openAddYearModal = openAddYearModal;
+  window.openAddRoundModal = openAddRoundModal;
+  window.selectFeedbackType = selectFeedbackType;
+  window.submitAdminFeedback = submitAdminFeedback;
+  window.uploadVideo = uploadVideo;
+  window.deleteVideo = deleteVideo;
+  window.createUser = createUser;
+  window.deleteUser = deleteUser;
+  window.loadTrainerFacilityData = loadTrainerFacilityData;
 </script>
 </body>
 </html>
