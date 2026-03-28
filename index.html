@@ -8,10 +8,9 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   
-  <!-- Firebase SDKs (Compat version for easier integration) -->
+  <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-storage-compat.js"></script>
   
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -119,6 +118,7 @@
         <input type="text" id="loginUsername" placeholder="Username">
         <input type="password" id="loginPassword" placeholder="Password">
         <button onclick="login()"><i class="fas fa-sign-in-alt"></i> Login</button>
+        <p style="text-align:center; margin-top:1rem; font-size:0.8rem; color:#6c8a9e;">Demo: admin / admin123</p>
       </div>
       <div id="registerForm" class="auth-form" style="display:none;">
         <input type="text" id="regFacilityName" placeholder="Facility Name">
@@ -149,7 +149,7 @@
         
         <div class="feedback-card-admin"><h3><i class="fas fa-users"></i> User Management</h3>
           <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1rem;"><input type="text" id="newUsername" placeholder="Username" style="flex:1; padding:0.5rem; border-radius:30px;"><input type="password" id="newUserPassword" placeholder="Password" style="flex:1; padding:0.5rem; border-radius:30px;"><select id="newUserRole" style="padding:0.5rem; border-radius:30px;"><option value="facility">Facility Head</option><option value="trainer">Trainer</option><option value="admin">Admin</option></select><select id="newUserFacility" style="padding:0.5rem; border-radius:30px;"><option value="">-- Select Facility --</option></select><button class="btn-primary" onclick="createUser()"><i class="fas fa-user-plus"></i> Create User</button></div>
-          <div style="overflow-x:auto;"><table class="user-table" id="userTable"><thead>大学的<th>Username</th><th>Role</th><th>Facility</th><th>Actions</th> </thead><tbody id="userTableBody"></tbody> </table></div>
+          <div style="overflow-x:auto;"><table class="user-table" id="userTable"><thead><tr><th>Username</th><th>Role</th><th>Facility</th><th>Actions</th></tr></thead><tbody id="userTableBody"></tbody></table></div>
         </div>
         
         <div class="video-card"><h3><i class="fas fa-video"></i> Video Training Library</h3>
@@ -192,7 +192,6 @@
 
 <script>
   // ==================== FIREBASE CONFIGURATION ====================
-  // Your Firebase configuration
   const firebaseConfig = {
     apiKey: "AIzaSyBL_Rh87QkR-mA1z6lVzv5vNAhO9yZipe0",
     authDomain: "eqa433bereket.firebaseapp.com",
@@ -295,6 +294,7 @@
           await db.collection('users').doc(u.id).set(u);
           users.push(u);
         }
+        console.log("Default users created successfully!");
       }
       
       // Load videos
@@ -307,7 +307,7 @@
       renderRoundSelector();
     } catch (error) {
       console.error("Error loading data:", error);
-      alert("Error loading data. Please check your Firebase configuration and ensure Firestore is enabled.");
+      alert("Error loading data. Please check your Firebase configuration and ensure Firestore is enabled in the Firebase Console.");
     }
     hideLoading();
   }
@@ -328,16 +328,51 @@
     }
   }
   
-  function updateFacilityCount() { document.getElementById('facilityCount').innerText = facilities.length; }
-  function renderYearSelector() { let s = document.getElementById('yearSelector'); s.innerHTML = years.map(y => `<option value="${y}" ${y===currentYear?'selected':''}>${y}</option>`).join(''); }
-  function renderRoundSelector() { let s = document.getElementById('roundSelector'); let rounds = roundsByYear[currentYear] || ["Round 1"]; s.innerHTML = rounds.map(r => `<option value="${r}" ${r===currentRound?'selected':''}>${r}</option>`).join(''); }
+  function updateFacilityCount() { 
+    const countEl = document.getElementById('facilityCount');
+    if (countEl) countEl.innerText = facilities.length; 
+  }
   
-  async function changeYear() { currentYear = document.getElementById('yearSelector').value; currentRound = (roundsByYear[currentYear] || ["Round 1"])[0]; await db.collection('system').doc('config').update({ currentYear, currentRound }); renderRoundSelector(); refreshCurrentView(); }
-  async function changeRound() { currentRound = document.getElementById('roundSelector').value; await db.collection('system').doc('config').update({ currentRound }); refreshCurrentView(); }
+  function renderYearSelector() { 
+    let s = document.getElementById('yearSelector'); 
+    if (s) s.innerHTML = years.map(y => `<option value="${y}" ${y===currentYear?'selected':''}>${y}</option>`).join(''); 
+  }
   
-  function refreshCurrentView() { if (currentUser?.role === 'admin') renderAdminView(); else if (currentUser?.role === 'trainer') renderTrainerView(); else renderFacilityUserView(); }
+  function renderRoundSelector() { 
+    let s = document.getElementById('roundSelector'); 
+    if (s) {
+      let rounds = roundsByYear[currentYear] || ["Round 1"]; 
+      s.innerHTML = rounds.map(r => `<option value="${r}" ${r===currentRound?'selected':''}>${r}</option>`).join('');
+    }
+  }
   
-  function selectFeedbackType(type) { selectedFeedbackType = type; document.querySelectorAll('.feedback-type-btn').forEach(btn => { if(btn.dataset.type === type) btn.classList.add('selected'); else btn.classList.remove('selected'); }); }
+  async function changeYear() { 
+    currentYear = document.getElementById('yearSelector').value; 
+    currentRound = (roundsByYear[currentYear] || ["Round 1"])[0]; 
+    await db.collection('system').doc('config').update({ currentYear, currentRound }); 
+    renderRoundSelector(); 
+    refreshCurrentView(); 
+  }
+  
+  async function changeRound() { 
+    currentRound = document.getElementById('roundSelector').value; 
+    await db.collection('system').doc('config').update({ currentRound }); 
+    refreshCurrentView(); 
+  }
+  
+  function refreshCurrentView() { 
+    if (currentUser?.role === 'admin') renderAdminView(); 
+    else if (currentUser?.role === 'trainer') renderTrainerView(); 
+    else renderFacilityUserView(); 
+  }
+  
+  function selectFeedbackType(type) { 
+    selectedFeedbackType = type; 
+    document.querySelectorAll('.feedback-type-btn').forEach(btn => { 
+      if(btn.dataset.type === type) btn.classList.add('selected'); 
+      else btn.classList.remove('selected'); 
+    }); 
+  }
   
   // ==================== AUTHENTICATION ====================
   async function login() {
@@ -350,7 +385,7 @@
       sessionStorage.setItem('eqa_current_user', JSON.stringify(user));
       await showMainApp();
     } else {
-      alert("Invalid credentials");
+      alert("Invalid credentials. Use admin / admin123");
     }
   }
   
@@ -377,10 +412,17 @@
     document.getElementById('loginTabBtn').click();
   }
   
-  function logout() { currentUser = null; sessionStorage.removeItem('eqa_current_user'); showAuthView(); }
+  function logout() { 
+    currentUser = null; 
+    sessionStorage.removeItem('eqa_current_user'); 
+    showAuthView(); 
+  }
   
   // ==================== USER MANAGEMENT ====================
-  function renderUserTable() { let tbody = document.getElementById('userTableBody'); tbody.innerHTML = users.map(u => `<td>${escapeHtml(u.username)}</td><td><span class="role-badge role-${u.role}">${u.role}</span></td><td>${u.facilityName || '-'}</td><td><button class="btn-outline" style="padding:0.2rem 0.5rem;" onclick="deleteUser('${u.id}')"><i class="fas fa-trash"></i></button></td>`).join(''); }
+  function renderUserTable() { 
+    let tbody = document.getElementById('userTableBody'); 
+    if (tbody) tbody.innerHTML = users.map(u => `<tr><td>${escapeHtml(u.username)}</td><td><span class="role-badge role-${u.role}">${u.role}</span></td><td>${u.facilityName || '-'}</td><td><button class="btn-outline" style="padding:0.2rem 0.5rem;" onclick="deleteUser('${u.id}')"><i class="fas fa-trash"></i></button></td></tr>`).join(''); 
+  }
   
   async function createUser() {
     const username = document.getElementById('newUsername').value.trim();
@@ -735,15 +777,17 @@
   function openAddRoundModal() { document.getElementById('roundModal').style.display = 'flex'; }
   
   function setupEventListeners() {
-    document.getElementById('loginTabBtn').onclick = () => {
-      document.getElementById('loginTabBtn').classList.add('active');
-      document.getElementById('registerTabBtn').classList.remove('active');
+    const loginTab = document.getElementById('loginTabBtn');
+    const registerTab = document.getElementById('registerTabBtn');
+    if (loginTab) loginTab.onclick = () => {
+      loginTab.classList.add('active');
+      registerTab.classList.remove('active');
       document.getElementById('loginForm').style.display = 'block';
       document.getElementById('registerForm').style.display = 'none';
     };
-    document.getElementById('registerTabBtn').onclick = () => {
-      document.getElementById('registerTabBtn').classList.add('active');
-      document.getElementById('loginTabBtn').classList.remove('active');
+    if (registerTab) registerTab.onclick = () => {
+      registerTab.classList.add('active');
+      loginTab.classList.remove('active');
       document.getElementById('loginForm').style.display = 'none';
       document.getElementById('registerForm').style.display = 'block';
     };
